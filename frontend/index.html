@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <title>购物小票OCR识别工具</title>
+    <style>
+        /* 基础样式设置 */
+        body { font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; margin: 0; padding: 20px; background: #f5f7fa; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 2px 20px rgba(0,0,0,0.08); }
+
+        /* 上传区域样式 */
+        .upload-area { border: 3px dashed #ccc; border-radius: 8px; padding: 40px 20px; text-align: center; margin-bottom: 30px; transition: all 0.3s; cursor: pointer; }
+        .upload-area:hover, .upload-area.dragover { border-color: #4a6cf7; background-color: #f0f4ff; }
+        #fileInput { display: none; }
+        .upload-label { font-size: 1.2em; color: #4a6cf7; cursor: pointer; display: block; }
+
+        /* 图片预览区域 */
+        #imagePreview { text-align: center; margin: 20px 0; display: none; }
+        #previewImg { max-width: 100%; max-height: 400px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+
+        /* 控制面板（列选择与按钮） */
+        .controls-panel { background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; display: none; }
+        .column-selector { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 15px; }
+        .column-option { display: flex; align-items: center; }
+        .column-option input { margin-right: 8px; }
+
+        /* 按钮样式 */
+        button { background: #4a6cf7; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-size: 1em; transition: background 0.2s; }
+        button:hover { background: #3a5bd9; }
+        button:disabled { background: #a0a0a0; cursor: not-allowed; }
+        #recognizeBtn { background: #10b981; }
+        #recognizeBtn:hover { background: #0da271; }
+        #recognizeBtn:disabled { background: #a0f0c7; }
+
+        /* 结果区域样式 */
+        #resultArea { margin-top: 30px; display: none; }
+        #loadingIndicator { text-align: center; color: #666; display: none; }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #4a6cf7; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 10px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* 表格样式 */
+        #resultTable { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        #resultTable th, #resultTable td { border: 1px solid #e2e8f0; padding: 12px 15px; text-align: left; }
+        #resultTable th { background-color: #4a6cf7; color: white; font-weight: 600; }
+        #resultTable tr:nth-child(even) { background-color: #f8fafc; }
+        #resultTable tr:hover { background-color: #f0f4ff; }
+
+        /* 错误和空状态提示 */
+        #errorArea, #emptyResult { padding: 15px; border-radius: 6px; text-align: center; display: none; }
+        #errorArea { background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+        #emptyResult { background-color: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛒 购物小票OCR识别系统</h1>
+        <p>上传购物小票、支付截图等图片，快速提取并整理消费信息。</p>
+
+        <!-- 图片上传区域 -->
+        <div class="upload-area" id="uploadArea">
+            <input type="file" id="fileInput" accept="image/*">
+            <label for="fileInput" class="upload-label">📁 点击选择图片 或 直接将图片拖拽至此</label>
+            <p style="margin-top: 10px; color: #666; font-size: 0.9em;">支持格式：JPEG, PNG, WEBP (建议图片大小 < 5MB)</p>
+        </div>
+
+        <!-- 图片预览 -->
+        <div id="imagePreview">
+            <img id="previewImg" src="" alt="图片预览">
+        </div>
+
+        <!-- 控制面板：列选择与识别按钮 -->
+        <div class="controls-panel" id="controlsPanel">
+            <h3>🔧 自定义结果表格</h3>
+            <p>请选择您希望在结果表格中展示的信息列：</p>
+            <div class="column-selector" id="columnSelector">
+                <!-- 列选择选项将通过JavaScript动态生成 -->
+            </div>
+            <button id="recognizeBtn">开始识别</button>
+        </div>
+
+        <!-- 加载指示器 -->
+        <div id="loadingIndicator">
+            <div class="spinner"></div>
+            <p>正在努力识别中，请稍候...</p>
+        </div>
+
+        <!-- 错误信息显示 -->
+        <div id="errorArea"></div>
+
+        <!-- 识别结果区域 -->
+        <div id="resultArea">
+            <h3>📋 识别结果</h3>
+            <div id="emptyResult">未找到可识别的表格数据，请尝试调整图片或选择其他列。</div>
+            <table id="resultTable">
+                <thead>
+                    <!-- 表头将通过JavaScript动态生成 -->
+                </thead>
+                <tbody>
+                    <!-- 表格数据将通过JavaScript动态生成 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // 后端API基础URL - 请根据您的实际部署地址修改
+        const API_BASE_URL = 'http://47.92.221.246:8000/api/v1';
+
+        // 页面元素引用
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const imagePreview = document.getElementById('imagePreview');
+        const previewImg = document.getElementById('previewImg');
+        const controlsPanel = document.getElementById('controlsPanel');
+        const columnSelector = document.getElementById('columnSelector');
+        const recognizeBtn = document.getElementById('recognizeBtn');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const resultArea = document.getElementById('resultArea');
+        const resultTable = document.getElementById('resultTable');
+        const errorArea = document.getElementById('errorArea');
+        const emptyResult = document.getElementById('emptyResult');
+
+        // 可用的列选项（这些应与后端返回的数据字段匹配）
+        // 您可以根据后端OCR服务实际返回的字段进行调整
+        const availableColumns = [
+            { id: 'item_name', name: '商品名称', default: true },
+            { id: 'quantity', name: '数量', default: true },
+            { id: 'unit_price', name: '单价', default: true },
+            { id: 'total_price', name: '总价', default: true },
+            { id: 'category', name: '分类', default: false },
+            { id: 'transaction_date', name: '交易日期', default: false },
+            { id: 'store_name', name: '商店名称', default: false }
+        ];
+
+        // 当前选中的列和图片数据
+        let selectedColumns = availableColumns.filter(col => col.default).map(col => col.id);
+        let currentImageFile = null;
+
+        // 初始化列选择器
+        function initializeColumnSelector() {
+            columnSelector.innerHTML = '';
+            availableColumns.forEach(column => {
+                const optionDiv = document.createElement('div');
+                optionDiv.className = 'column-option';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `col_${column.id}`;
+                checkbox.checked = selectedColumns.includes(column.id);
+                checkbox.addEventListener('change', function() {
+                    if (this.checked) {
+                        if (!selectedColumns.includes(column.id)) {
+                            selectedColumns.push(column.id);
+                        }
+                    } else {
+                        selectedColumns = selectedColumns.filter(id => id !== column.id);
+                    }
+                });
+
+                const label = document.createElement('label');
+                label.htmlFor = `col_${column.id}`;
+                label.textContent = column.name;
+
+                optionDiv.appendChild(checkbox);
+                optionDiv.appendChild(label);
+                columnSelector.appendChild(optionDiv);
+            });
+        }
+
+        // 初始化拖放功能
+        function initializeDragAndDrop() {
+            // 防止浏览器默认的拖放行为
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+
+            // 高亮显示拖放区域
+            ['dragenter', 'dragover'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, highlight, false);
+            });
+            ['dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, unhighlight, false);
+            });
+
+            // 处理拖放文件
+            uploadArea.addEventListener('drop', handleDrop, false);
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            function highlight() {
+                uploadArea.classList.add('dragover');
+            }
+
+            function unhighlight() {
+                uploadArea.classList.remove('dragover');
+            }
+
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files.length > 0) {
+                    handleImageSelection(files[0]);
+                }
+            }
+        }
+
+        // 处理图片选择（包括文件输入和拖放）
+        function handleImageSelection(file) {
+            // 简单的文件类型验证
+            if (!file.type.match('image.*')) {
+                showError('请选择有效的图片文件（JPEG、PNG等格式）。');
+                return;
+            }
+
+            // 简单的文件大小验证（限制为5MB）
+            if (file.size > 5 * 1024 * 1024) {
+                showError('图片大小不能超过5MB，请选择较小的图片。');
+                return;
+            }
+
+            currentImageFile = file;
+
+            // 预览图片
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewImg.src = e.target.result;
+                imagePreview.style.display = 'block';
+                controlsPanel.style.display = 'block';
+                resultArea.style.display = 'none';
+                errorArea.style.display = 'none';
+
+                // 滚动到控制面板区域
+                controlsPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            errorArea.textContent = '错误: ' + message;
+            errorArea.style.display = 'block';
+            resultArea.style.display = 'none';
+            loadingIndicator.style.display = 'none';
+        }
+
+        // 隐藏错误信息
+        function hideError() {
+            errorArea.style.display = 'none';
+        }
+
+        // 执行OCR识别
+        async function performOCR() {
+            if (!currentImageFile) {
+                showError('请先选择一张图片。');
+                return;
+            }
+
+            // 显示加载指示器
+            loadingIndicator.style.display = 'block';
+            resultArea.style.display = 'none';
+            hideError();
+            recognizeBtn.disabled = true;
+
+            try {
+                // 创建FormData对象，用于文件上传
+                const formData = new FormData();
+                formData.append('file', currentImageFile);
+
+                // 构建请求URL，包含选择的列作为查询参数
+                const columnsParam = selectedColumns.join(',');
+                const url = `${API_BASE_URL}/ocr/receipt?columns=${encodeURIComponent(columnsParam)}`;
+
+                // 发送请求到后端API
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `服务器错误: ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                // 处理识别结果
+                displayResults(result);
+
+            } catch (error) {
+                console.error('OCR识别失败:', error);
+                showError(`识别过程中出现错误: ${error.message}`);
+            } finally {
+                // 隐藏加载指示器，重新启用识别按钮
+                loadingIndicator.style.display = 'none';
+                recognizeBtn.disabled = false;
+            }
+        }
+
+        // 显示识别结果
+        function displayResults(result) {
+            hideError();
+            emptyResult.style.display = 'none';
+
+            let dataArray = [];
+            if (Array.isArray(result.data)) {
+                dataArray = result.data;  // 如果已经是数组
+            } else if (result.data && typeof result.data === 'object' && Array.isArray(result.data.items)) {
+                dataArray = result.data.items;  // 提取 items 数组（基于后端结构）
+            } else if (result.data && typeof result.data === 'object') {
+                // 如果是对象，转为单元素数组（e.g., 显示总体信息）
+                dataArray = [result.data];
+            }
+
+            if (dataArray.length === 0) {
+                emptyResult.style.display = 'block';
+                resultTable.style.display = 'none';
+                resultArea.style.display = 'block';
+                return;
+            }
+
+            resultArea.style.display = 'block';
+            resultTable.style.display = 'table';
+
+            resultTable.querySelector('thead').innerHTML = '';
+            resultTable.querySelector('tbody').innerHTML = '';
+
+            const headerRow = document.createElement('tr');
+            selectedColumns.forEach(columnId => {
+                const column = availableColumns.find(col => col.id === columnId);
+                if (column) {
+                    const th = document.createElement('th');
+                    th.textContent = column.name;
+                    headerRow.appendChild(th);
+                }
+            });
+            resultTable.querySelector('thead').appendChild(headerRow);
+
+            const tbody = resultTable.querySelector('tbody');
+            dataArray.forEach(item => {  // 现在使用 dataArray，确保是数组
+                const row = document.createElement('tr');
+                selectedColumns.forEach(columnId => {
+                    const td = document.createElement('td');
+                    td.textContent = item[columnId] || '';
+                    row.appendChild(td);
+                });
+                tbody.appendChild(row);
+            });
+
+            resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 初始化事件监听
+        function initializeEventListeners() {
+            // 文件输入变化事件
+            fileInput.addEventListener('change', function() {
+                if (this.files && this.files[0]) {
+                    handleImageSelection(this.files[0]);
+                }
+            });
+
+            // 识别按钮点击事件
+            recognizeBtn.addEventListener('click', performOCR);
+
+            // 点击上传区域触发文件选择
+            uploadArea.addEventListener('click', function(e) {
+                if (e.target !== fileInput) {
+                    fileInput.click();
+                }
+            });
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeColumnSelector();
+            initializeDragAndDrop();
+            initializeEventListeners();
+        });
+    </script>
+</body>
+</html>
